@@ -26,20 +26,6 @@
   version = "v1"
 
 [[projects]]
-  digest = "1:1bf6a5947f3b498afb17b49edf9bd0fff36f009ed58131e79ab71465845db283"
-  name = "github.com/anthonynsimon/bild"
-  packages = [
-    "clone",
-    "imgio",
-    "math/f64",
-    "parallel",
-    "transform",
-  ]
-  pruneopts = "UT"
-  revision = "35fd1904d43f809ded0959922164885e25577aa2"
-  version = "v0.10.0"
-
-[[projects]]
   branch = "master"
   digest = "1:1237f2e0fe3256bbce813cc1bafddaf26b85bddbd2f8c08c30eb845140198aee"
   name = "github.com/armon/consul-api"
@@ -510,8 +496,6 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Unknwon/com",
-    "github.com/anthonynsimon/bild/imgio",
-    "github.com/anthonynsimon/bild/transform",
     "github.com/pkg/errors",
     "github.com/rai-project/config",
     "github.com/rai-project/dlframework",

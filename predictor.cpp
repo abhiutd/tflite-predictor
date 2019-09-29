@@ -8,13 +8,11 @@
 #include <vector>
 #include <iostream>
 
-#include "tensorflow/contrib/lite/interpreter.h"
-#include "tensorflow/contrib/lite/kernels/register.h"
-#include "tensorflow/contrib/lite/model.h"
-#include "tensorflow/contrib/lite/optional_debug_tools.h"
-
-// ISSUE: would make it tensorflow specific 
-//#include "tensorflow/contrib/android/asset_manager_filesystem.cc"
+#include "tensorflow/lite/interpreter.h"
+#include "tensorflow/lite/kernels/register.h"
+#include "tensorflow/lite/model.h"
+#include "tensorflow/lite/optional_debug_tools.h"
+#include "tensorflow/lite/delegates/gpu/gl_delegate.h"
 
 #include "predictor.hpp"
 
@@ -74,11 +72,11 @@ void Predictor::Predict(float* inputData) {
 	  interpreter->SetNumThreads(4);
   }else if(mode_ == 1) {
     // GPU
-    auto* delegate =TfLiteGpuDelegateCreate(/*options=*/nullptr);
+    auto* delegate = TfLiteGpuDelegateCreate(/*options=*/nullptr);
     if(interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) return;
   }else if(mode_ == 2) {
     // NNAPI (decides internally which hardware mode to run inference in)
-    interpreter->setUseNNAPI(true);
+    interpreter->UseNNAPI(true);
   }
 
 	// allocate tensor buffers

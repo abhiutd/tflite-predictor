@@ -7,13 +7,14 @@
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <iomanip>
 
 #include "absl/memory/memory.h"
 #include "tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
 #include "tensorflow/lite/profiling/profiler.h"
 #include "tensorflow/lite/string_util.h"
 #include "tensorflow/lite/tools/evaluation/utils.h"
-#include "tensorflow/lite/string_type.h"
+//#include "tensorflow/lite/string_type.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -22,7 +23,7 @@
 
 #include "predictor.hpp"
 
-#define LOG(x) std:cerr
+#define LOG(x) std::cerr
 
 using namespace tflite;
 using std::string;
@@ -73,7 +74,7 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
   
   if(verbose) {
     LOG(INFO) << "tensors size: " << interpreter->tensors_size() << "\n";
-    LOG(INFO) << "nodes size: " << interpreter->nodes__size() << "\n";
+    LOG(INFO) << "nodes size: " << interpreter->nodes_size() << "\n";
     LOG(INFO) << "inputs: " << interpreter->inputs().size() << "\n";
     LOG(INFO) << "inputs(0) name: " << interpreter->GetInputName(0) << "\n";
     int t_size = interpreter->tensors_size();
@@ -101,45 +102,46 @@ void Predictor::Predict(float* inputData) {
   }
 
   switch(mode_) {
-    case 1:
+    case 1: {
       #if defined(__ANDROID__)
-        TfLiteGpuDelegate options = TfLiteGpuDelegateOptionsDefault();
-        options.metadata = TfLiteGpuDelegateGetModelMetadata(net_->GetModel());
+        TfLiteGpuDelegateOptions* options;
+        options->metadata = TfLiteGpuDelegateGetModelMetadata(net_->GetModel());
         if(allow_fp16)
-          options.compile_options.precision_loss_allowed = 1;
+          options->compile_options.precision_loss_allowed = 1;
         else
-          options.compile_options.precision_loss_allowed = 0;
-        options.compile_options.preferred_gl_object_type = TFLITE_GL_OBJECT_TYPE_FASTEST;
-        options.compile_options.dynamic_batch_enabled = 0;
-        auto delegate = evaluation::CreateGPUDelegate(net_, &options);
+          options->compile_options.precision_loss_allowed = 0;
+        options->compile_options.preferred_gl_object_type = TFLITE_GL_OBJECT_TYPE_FASTEST;
+        options->compile_options.dynamic_batch_enabled = 0;
+        auto delegate = tflite::evaluation::CreateGPUDelegate(net_.get(), options);
         if(!delegate) {
           LOG(INFO) << "GPU acceleration is unsupported on this platform" << "\n";
         }
-        if(interpreter->ModifyGraphWithDelegate(delegate) != kTfLIteOk) {
+        if(interpreter->ModifyGraphWithDelegate(delegate.get()) != kTfLiteOk) {
           LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";
         } else {
-          LOG(INFO) << "Applied " < "GPU delegate" << "\n";
+          LOG(INFO) << "Applied " << "GPU delegate" << "\n";
         }
       #else
-        auto delegate = evaluation::CreateGPUDelegate(net_);
+        auto delegate = tflite::evaluation::CreateGPUDelegate(net_.get());
         if(!delegate) {
           LOG(INFO) << "GPU acceleraton is unsupported on this platform" << "\n";
         }
-        if(interpreter->ModifyGraphWithDelegate(delegate) != kTfLIteOk) {
+        if(interpreter->ModifyGraphWithDelegate(delegate.get()) != kTfLiteOk) {
           LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";
         } else {
           LOG(INFO) << "Applied " < "GPU delegate" << "\n";
         }
-      break;
-    case 2:
-      auto delegate = evaluation::CreateNNAPIDelegate();
+      #endif
+      break; }
+    case 2: {
+      auto delegate = tflite::evaluation::CreateNNAPIDelegate();
       if(!delegate) {
         LOG(INFO) << "NNAPI acceleration is unsupported on this platform" << "\n";
       }
       interpreter->UseNNAPI(true);
-      break;
-    default:
-      interpreter->SetNumThreads(4);
+      break; }
+    default: {
+      interpreter->SetNumThreads(4); }
   }
   
   if(interpreter->AllocateTensors() != kTfLiteOk) {
@@ -175,9 +177,9 @@ void Predictor::Predict(float* inputData) {
 
   if(profiling) {
     profiler->StopProfiling();
-    auto profile_events = profiler->GetProfilerEvents();
-    for(int i = 0; i < profiler_events.size(); i++) {
-      auto op_index = profiler_events[i]->event_metadata;
+    auto profile_events = profiler->GetProfileEvents();
+    for(int i = 0; i < profile_events.size(); i++) {
+      auto op_index = profile_events[i]->event_metadata;
       const auto node_and_registration = interpreter->node_and_registration(op_index);
       const TfLiteRegistration registration = node_and_registration->second;
       LOG(INFO) << std::fixed << std::setw(10) << std::setprecision(3)

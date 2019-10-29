@@ -89,7 +89,7 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
                   << interpreter->tensor(i)->params.zero_point << "\n";
     }
   }
-  interpreter->SetNumThreads(4);
+  //interpreter->SetNumThreads(4);
 }
 
 void Predictor::Predict(float* inputData) {
@@ -115,7 +115,7 @@ void Predictor::Predict(float* inputData) {
       };
       auto* delegate = TfLiteGpuDelegateCreate(&options);
       if(!delegate) {
-        LOG(FATAL) << "Unable tp create GPU delegate" << "\n";
+        LOG(FATAL) << "Unable to create GPU delegate" << "\n";
       }
       if(interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
          LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";

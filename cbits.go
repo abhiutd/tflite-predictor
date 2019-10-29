@@ -22,6 +22,11 @@ const (
 	CPUMode        = 0
 	GPUMode        = 1
 	NNAPIMode      = 2
+	CPUMode1       = 3
+	CPUMode2       = 4
+	CPUMode3       = 5
+    CPUMode5       = 6
+	CPUMode6       = 7
 )
 
 // Predictor Structure definition
@@ -135,7 +140,14 @@ func ReadPredictionOutput(p *PredictorData, labelFile string) (string, error) {
 	}
 
 	top1 := features[0][0]
-	return top1.GetClassification().GetLabel(), nil
+	top2 := features[0][1]
+	top3 := features[0][2]
+	top4 := features[0][3]
+	top5 := features[0][4]
+
+	top_concatenated := top1.GetClassification().GetLabel() + "\\" + top2.GetClassification().GetLabel() + "\\" + top3.GetClassification().GetLabel() + "\\" + top4.GetClassification().GetLabel() + "\\" + top5.GetClassification().GetLabel()
+
+	return top_concatenated, nil
 
 }
 

@@ -8,13 +8,13 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <sys/time.h>
 
 #include "absl/memory/memory.h"
 #include "tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
 #include "tensorflow/lite/profiling/profiler.h"
 #include "tensorflow/lite/string_util.h"
 #include "tensorflow/lite/tools/evaluation/utils.h"
-//#include "tensorflow/lite/string_type.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -27,6 +27,8 @@
 
 using namespace tflite;
 using std::string;
+
+double get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
 /* Pair (label, confidence) representing a prediction. */
 using Prediction = std::pair<int, float>;
@@ -49,7 +51,7 @@ class Predictor {
     TfLiteTensor* result_;
     bool verbose = true;
     bool allow_fp16 = false;
-    bool profiling = true;
+    bool profiling = false;
     bool read_outputs = true;
 };
 
@@ -103,35 +105,23 @@ void Predictor::Predict(float* inputData) {
 
   switch(mode_) {
     case 1: {
-      #if defined(__ANDROID__)
-        TfLiteGpuDelegateOptions* options;
-        options->metadata = TfLiteGpuDelegateGetModelMetadata(net_->GetModel());
-        if(allow_fp16)
-          options->compile_options.precision_loss_allowed = 1;
-        else
-          options->compile_options.precision_loss_allowed = 0;
-        options->compile_options.preferred_gl_object_type = TFLITE_GL_OBJECT_TYPE_FASTEST;
-        options->compile_options.dynamic_batch_enabled = 0;
-        auto delegate = tflite::evaluation::CreateGPUDelegate(net_.get(), options);
-        if(!delegate) {
-          LOG(INFO) << "GPU acceleration is unsupported on this platform" << "\n";
-        }
-        if(interpreter->ModifyGraphWithDelegate(delegate.get()) != kTfLiteOk) {
-          LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";
-        } else {
-          LOG(INFO) << "Applied " << "GPU delegate" << "\n";
-        }
-      #else
-        auto delegate = tflite::evaluation::CreateGPUDelegate(net_.get());
-        if(!delegate) {
-          LOG(INFO) << "GPU acceleraton is unsupported on this platform" << "\n";
-        }
-        if(interpreter->ModifyGraphWithDelegate(delegate.get()) != kTfLiteOk) {
-          LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";
-        } else {
-          LOG(INFO) << "Applied " < "GPU delegate" << "\n";
-        }
-      #endif
+      const TfLiteGpuDelegateOptions options = {
+        .metadata = NULL,
+        .compile_options = {
+          .precision_loss_allowed = 1, // FP16
+          .preferred_gl_object_type = TFLITE_GL_OBJECT_TYPE_FASTEST,
+          .dynamic_batch_enabled = 0, // Not fully functional yet
+        },
+      };
+      auto* delegate = TfLiteGpuDelegateCreate(&options);
+      if(!delegate) {
+        LOG(FATAL) << "Unable tp create GPU delegate" << "\n";
+      }
+      if(interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
+         LOG(FATAL) << "Failed to apply " << "GPU delegate" << "\n";
+      } else {
+         LOG(INFO) << "Applied " << "GPU delegate" << "\n";
+      }
       break; }
     case 2: {
       auto delegate = tflite::evaluation::CreateNNAPIDelegate();
@@ -139,6 +129,21 @@ void Predictor::Predict(float* inputData) {
         LOG(INFO) << "NNAPI acceleration is unsupported on this platform" << "\n";
       }
       interpreter->UseNNAPI(true);
+      break; }
+    case 3: {
+      interpreter->SetNumThreads(1); 
+      break; }
+    case 4: {
+      interpreter->SetNumThreads(2); 
+      break; }
+    case 5: {
+      interpreter->SetNumThreads(3); 
+      break; }
+    case 6: {
+      interpreter->SetNumThreads(5); 
+      break; }
+    case 7: {
+      interpreter->SetNumThreads(6); 
       break; }
     default: {
       interpreter->SetNumThreads(4); }
@@ -169,11 +174,15 @@ void Predictor::Predict(float* inputData) {
   interpreter->SetProfiler(profiler.get());
   if(profiling)
     profiler->StartProfiling();
-  
+
+  struct timeval start_time, stop_time;
+  gettimeofday(&start_time, nullptr);  
   // run inference
   if(interpreter->Invoke() != kTfLiteOk) {
     LOG(FATAL) << "Failed to invoke tflite" << "\n";
   }
+  gettimeofday(&stop_time, nullptr);
+  LOG(INFO) << "single inference: " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n"; 
 
   if(profiling) {
     profiler->StopProfiling();

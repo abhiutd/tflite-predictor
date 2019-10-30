@@ -49,14 +49,18 @@ class Predictor {
     int pred_len_ = 0;
     int mode_ = 0;
     TfLiteTensor* result_;
-    bool verbose = true;
+    bool verbose = false; // display model details
     bool allow_fp16 = false;
-    bool profiling = false;
+    bool profiling = false; // operator level profiling
     bool read_outputs = true;
 };
 
 Predictor::Predictor(const string &model_file, int batch, int mode) {
   char* model_file_char = const_cast<char*>(model_file.c_str());
+  
+  // profile model loading
+  struct timeval start_time, stop_time;
+  gettimeofday(&start_time, nullptr); 
   net_ = tflite::FlatBufferModel::BuildFromFile(model_file_char);
   if(!net_){
     LOG(FATAL) << "\nFailed to mmap model" << "\n";
@@ -70,7 +74,10 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
   if(!interpreter) {
     LOG(FATAL) << "Failed to construct interpreter\n";
   }	
-
+  gettimeofday(&stop_time, nullptr);
+  if(verbose) {
+    LOG(INFO) << "Model loading (C++): " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n";
+  }
   mode_ = mode;
   batch_ = batch;
   
@@ -89,7 +96,6 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
                   << interpreter->tensor(i)->params.zero_point << "\n";
     }
   }
-  //interpreter->SetNumThreads(4);
 }
 
 void Predictor::Predict(float* inputData) {
@@ -182,7 +188,9 @@ void Predictor::Predict(float* inputData) {
     LOG(FATAL) << "Failed to invoke tflite" << "\n";
   }
   gettimeofday(&stop_time, nullptr);
-  LOG(INFO) << "single inference: " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n"; 
+  if(verbose) {
+    LOG(INFO) << "Model computation (C++): " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n"; 
+  }
 
   if(profiling) {
     profiler->StopProfiling();

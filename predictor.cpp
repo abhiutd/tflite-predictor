@@ -30,17 +30,14 @@ using std::string;
 
 double get_us(struct timeval t) { return (t.tv_sec * 1000000 + t.tv_usec); }
 
-/* Pair (label, confidence) representing a prediction. */
-using Prediction = std::pair<int, float>;
-
 /*
   Predictor class takes in model file (converted into .tflite from the original .pb file
   using tflite_convert CLI tool), batch size and device mode for inference
 */
 class Predictor {
   public:
-    Predictor(const string &model_file, int batch, int mode);
-    void Predict(float* inputData);
+    Predictor(const string &model_file, int batch, int mode, bool verbose, bool profile);
+    void Predict(int* inputData_quantize, float* inputData_float, bool quantize);
 
     std::unique_ptr<tflite::FlatBufferModel> net_;
     std::unique_ptr<tflite::Interpreter> interpreter;
@@ -49,15 +46,20 @@ class Predictor {
     int pred_len_ = 0;
     int mode_ = 0;
     TfLiteTensor* result_;
-    bool verbose = false; // display model details
-    bool allow_fp16 = false;
-    bool profiling = false; // operator level profiling
-    bool read_outputs = true;
+    float* result_float_;
+    bool quantize_ = false;
+    bool verbose_ = false; // display model details
+    bool allow_fp16_ = false;
+    bool profile_ = false; // operator level profiling
+    bool read_outputs_ = true;
 };
 
-Predictor::Predictor(const string &model_file, int batch, int mode) {
+Predictor::Predictor(const string &model_file, int batch, int mode, bool verbose, bool profile) {
   char* model_file_char = const_cast<char*>(model_file.c_str());
   
+  profile_ = profile;
+  verbose_ = verbose;
+ 
   // profile model loading
   struct timeval start_time, stop_time;
   gettimeofday(&start_time, nullptr); 
@@ -81,7 +83,7 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
   mode_ = mode;
   batch_ = batch;
   
-  if(verbose) {
+  if(verbose_) {
     LOG(INFO) << "tensors size: " << interpreter->tensors_size() << "\n";
     LOG(INFO) << "nodes size: " << interpreter->nodes_size() << "\n";
     LOG(INFO) << "inputs: " << interpreter->inputs().size() << "\n";
@@ -98,19 +100,19 @@ Predictor::Predictor(const string &model_file, int batch, int mode) {
   }
 }
 
-void Predictor::Predict(float* inputData) {
+void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool quantize) {
   int input = interpreter->inputs()[0];
-  if(verbose)
+  if(verbose_)
     LOG(INFO) << "input: " << input << "\n";
   const std::vector<int> inputs = interpreter->inputs();
   const std::vector<int> outputs = interpreter->outputs();
-  if(verbose) {
+  if(verbose_) {
     LOG(INFO) << "number of inputs: " << inputs.size() << "\n";
     LOG(INFO) << "number of outputs: " << outputs.size() << "\n";
   }
 
   switch(mode_) {
-    case 1: {
+    case 7: {
       const TfLiteGpuDelegateOptions options = {
         .metadata = NULL,
         .compile_options = {
@@ -129,27 +131,30 @@ void Predictor::Predict(float* inputData) {
          LOG(INFO) << "Applied " << "GPU delegate" << "\n";
       }
       break; }
-    case 2: {
+    case 8: {
       auto delegate = tflite::evaluation::CreateNNAPIDelegate();
       if(!delegate) {
         LOG(INFO) << "NNAPI acceleration is unsupported on this platform" << "\n";
       }
       interpreter->UseNNAPI(true);
       break; }
-    case 3: {
+    case 1: {
       interpreter->SetNumThreads(1); 
       break; }
-    case 4: {
+    case 2: {
       interpreter->SetNumThreads(2); 
       break; }
-    case 5: {
+    case 3: {
       interpreter->SetNumThreads(3); 
       break; }
-    case 6: {
+    case 4: {
+      interpreter->SetNumThreads(4); 
+      break; }
+    case 5: {
       interpreter->SetNumThreads(5); 
       break; }
-    case 7: {
-      interpreter->SetNumThreads(6); 
+    case 6: {
+      interpreter->SetNumThreads(6);
       break; }
     default: {
       interpreter->SetNumThreads(4); }
@@ -165,20 +170,32 @@ void Predictor::Predict(float* inputData) {
   height_ = input_dims->data[1];
   width_ = input_dims->data[2];
   channels_ = input_dims->data[3];
+  if(height_ != 224) LOG(FATAL) << "Model input height is not 224" << "\n";
+  if(width_ != 224) LOG(FATAL) << "Model input width is not 224" << "\n";
+  if(channels_ != 224) LOG(FATAL) << "Model input channel is not 3" << "\n";
 
   assert(input_dims->size == 4);
-  if(interpreter->tensor(input)->type != kTfLiteFloat32)
-    LOG(FATAL) << "Only support Float32 models as of now" << "\n";
 
   const int size = batch_ * width_ * height_ * channels_;
-  memcpy(input_tensor->data.f, &inputData[0], size);
+  if(interpreter->tensor(input)->type == kTfLiteFloat32 && quantize == false) {
+    LOG(INFO) << "Running float model" << "\n";
+    memcpy(interpreter->typed_tensor<float>(input), &inputData_float[0], size);
+  } else if (interpreter->tensor(input)->type == kTfLiteUInt8 && quantize == true) {
+    LOG(INFO) << "Running quantized model" << "\n";
+    uint8_t* base_pointer = interpreter->typed_tensor<uint8_t>(input);
+    for(int i = 0; i < size; i++) {
+      base_pointer[i] = (uint8_t)inputData_quantize[i];
+    }
+  } else {
+    LOG(FATAL) << "Unrecognized datatype or someother error" << "\n";
+  }
 
-  const int output = interpreter->outputs()[0];
-  result_ = interpreter->tensor(output);
+  //const int output = interpreter->outputs()[0];
+  //result_ = interpreter->tensor(output);
 
   auto profiler = absl::make_unique<profiling::Profiler>(1024);
   interpreter->SetProfiler(profiler.get());
-  if(profiling)
+  if(profile_)
     profiler->StartProfiling();
 
   struct timeval start_time, stop_time;
@@ -188,11 +205,11 @@ void Predictor::Predict(float* inputData) {
     LOG(FATAL) << "Failed to invoke tflite" << "\n";
   }
   gettimeofday(&stop_time, nullptr);
-  if(verbose) {
+  if(verbose_) {
     LOG(INFO) << "Model computation (C++): " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n"; 
   }
 
-  if(profiling) {
+  if(profile_) {
     profiler->StopProfiling();
     auto profile_events = profiler->GetProfileEvents();
     for(int i = 0; i < profile_events.size(); i++) {
@@ -214,22 +231,41 @@ void Predictor::Predict(float* inputData) {
   // has and divide it by 4 since we assume float is 4 bytes long
   // Potential Bug location
   //pred_len_ = result_->bytes/(4*batch_);
-  assert(result_->dims->size == 2);
-  assert(result_->dims->data[0] == 1);
-  pred_len_ = result_->dims->data[1];
+  //assert(result_->dims->size == 2);
+  //assert(result_->dims->data[0] == 1);
+  //pred_len_ = result_->dims->data[1];
 
-  if(result_->type != kTfLiteFloat32) {
-    LOG(FATAL) << "Expected a Float32 output" << "\n";
+  //if(result_->type != kTfLiteFloat32) {
+  //  LOG(FATAL) << "Expected a Float32 output" << "\n";
+  //}
+
+  int output = interpreter->outputs()[0];
+  TfLiteIntArray* output_dims = interpreter->tensor(output)->dims;
+  auto output_size = output_dims->data[output_dims->size-1];
+  pred_len_ = output_size;
+  
+  result_float_ = new float[output_size];
+  if(interpreter->tensor(output)->type == kTfLiteFloat32) {
+    float* prediction = interpreter->typed_output_tensor<float>(0);
+    for(int i = 0; i < output_size; i++)
+      result_float_[i] = prediction[i]; 
+  }	else if(interpreter->tensor(output)->type == kTfLiteUInt8) {
+    uint8_t* prediction = interpreter->typed_output_tensor<uint8_t>(0);
+    for(int i = 0; i < output_size; i++)
+      result_float_[i] = prediction[i] / 255.0; 
   }
-	
-  if(result_->data.f == nullptr) {
-    LOG(FATAL) << "Got a NULL output" << "\n";
-  }
+  
+  quantize_ = quantize;
+
+  //if(result_->data.f == nullptr) {
+  //  LOG(FATAL) << "Got a NULL output" << "\n";
+  //}
+
 }
 
-PredictorContext NewTflite(char *model_file, int batch, int mode) {
+PredictorContext NewTflite(char *model_file, int batch, int mode, bool verbose, bool profile) {
   try {
-    const auto ctx = new Predictor(model_file, batch, mode);
+    const auto ctx = new Predictor(model_file, batch, mode, verbose, profile);
     return (void *) ctx;
   } catch(const std::invalid_argument &ex) {
     errno = EINVAL;
@@ -239,12 +275,12 @@ PredictorContext NewTflite(char *model_file, int batch, int mode) {
 
 void InitTflite() {}
 
-void PredictTflite(PredictorContext pred, float* inputData) {
+void PredictTflite(PredictorContext pred, int* inputData_quantize, float* inputData_float, bool quantize) {
   auto predictor = (Predictor *)pred;
   if (predictor == nullptr) {
     return;
   }
-  predictor->Predict(inputData);
+  predictor->Predict(inputData_quantize, inputData_float, quantize);
   return;
 }
 
@@ -253,21 +289,23 @@ float* GetPredictionsTflite(PredictorContext pred) {
   if (predictor == nullptr) {
     return nullptr;
   }
-  if(predictor->result_ == nullptr) {
-    throw std::runtime_error("expected a non-nil result");	
-  }
-  if(!(predictor->result_->type == kTfLiteFloat32)) {
-    throw std::runtime_error("reuslt_->type is not Float32");
-  }
-  if(predictor->result_->data.f == nullptr) {
-    throw std::runtime_error("expected a non-nil result->data.f");
-  }
+  //if(predictor->result_ == nullptr) {
+  //  throw std::runtime_error("expected a non-nil result");	
+  //}
+  //if(!(predictor->result_->type == kTfLiteFloat32)) {
+  //  throw std::runtime_error("reuslt_->type is not Float32");
+  //}
+  //if(predictor->result_->data.f == nullptr) {
+  //  throw std::runtime_error("expected a non-nil result->data.f");
+  //}
 
-  if(predictor->result_->type == kTfLiteFloat32) {
-    return predictor->result_->data.f;
-  }else{
-    return nullptr;
-  }
+  //if(predictor->result_->type == kTfLiteFloat32) {
+  //  return predictor->result_->data.f;
+  //}else{
+  //  return nullptr;
+  //}
+
+  return predictor->result_float_;
 }
 
 void DeleteTflite(PredictorContext pred) {

@@ -6,16 +6,17 @@ extern "C" {
 #endif  // __cplusplus
 
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef void *PredictorContext;
 
-PredictorContext NewTflite(char *model_file, int batch, int mode);
+PredictorContext NewTflite(char *model_file, int batch, int mode, bool verbose, bool profile);
 
 void SetModeTflite(int mode);
 
 void InitTflite();
 
-void PredictTflite(PredictorContext pred, float *inputData);
+void PredictTflite(PredictorContext pred, int* inputData_quantize, float* inputData_float, bool quantize);
 
 float* GetPredictionsTflite(PredictorContext pred);
 

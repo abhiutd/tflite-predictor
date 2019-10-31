@@ -5,11 +5,11 @@ package tflite
 // #include "cbits/predictor.hpp"
 import "C"
 import (
-	"fmt"
-	"unsafe"
 	"bufio"
+	"fmt"
 	"os"
 	"sort"
+	"unsafe"
 
 	"github.com/Unknwon/com"
 	"github.com/pkg/errors"
@@ -19,14 +19,14 @@ import (
 
 // Hardware Modes
 const (
-	CPUMode        = 0
-	GPUMode        = 1
-	NNAPIMode      = 2
-	CPUMode1       = 3
-	CPUMode2       = 4
-	CPUMode3       = 5
-    CPUMode5       = 6
-	CPUMode6       = 7
+	CPUMode1  = 1
+	CPUMode2  = 2
+	CPUMode3  = 3
+	CPUMode4  = 4
+	CPUMode5  = 5
+	CPUMode6  = 6
+	GPUMode   = 7
+	NNAPIMode = 8
 )
 
 // Predictor Structure definition
@@ -48,7 +48,7 @@ func NewPredictorData() *PredictorData {
 }
 
 // Create new predictor
-func New(model string, mode, batch int) (*PredictorData, error) {
+func New(model string, mode, batch int, verbose bool, profile bool) (*PredictorData, error) {
 
 	modelFile := model
 	if !com.IsFile(modelFile) {
@@ -60,6 +60,8 @@ func New(model string, mode, batch int) (*PredictorData, error) {
 			C.CString(modelFile),
 			C.int(batch),
 			C.int(mode),
+			C.bool(verbose),
+			C.bool(profile),
 		),
 		mode:  mode,
 		batch: batch,
@@ -72,20 +74,24 @@ func init() {
 }
 
 // Run inference
-func Predict(p *PredictorData, data []byte) error {
+func Predict(p *PredictorData, data []byte, quantize bool) error {
 
 	if len(data) == 0 {
 		return fmt.Errorf("image data is empty")
 	}
 
-	ptr := (*C.float)(unsafe.Pointer(&data[0]))
-
-	C.PredictTflite(p.ctx, ptr)
+	ptr_quantize := (*C.int)(unsafe.Pointer(&data[0]))
+	ptr_float := (*C.float)(unsafe.Pointer(&data[0]))
+	if quantize == true {
+		C.PredictTflite(p.ctx, ptr_quantize, ptr_float, true)
+	} else {
+		C.PredictTflite(p.ctx, ptr_quantize, ptr_float, false)
+	}
 
 	return nil
 }
 
-// Return Top-1 predicted label
+// Return Top-5 predicted label
 func ReadPredictionOutput(p *PredictorData, labelFile string) (string, error) {
 
 	batchSize := p.batch
@@ -97,14 +103,13 @@ func ReadPredictionOutput(p *PredictorData, labelFile string) (string, error) {
 	if predLen == 0 {
 		return "", errors.New("null predLen")
 	}
-	
-  length := batchSize * predLen
+
+	length := batchSize * predLen
 	if p.ctx == nil {
 		return "", errors.New("empty predictor context")
 	}
-	
-  cPredictions := C.GetPredictionsTflite(p.ctx)
 
+	cPredictions := C.GetPredictionsTflite(p.ctx)
 	if cPredictions == nil {
 		return "", errors.New("empty predictions")
 	}
@@ -151,7 +156,7 @@ func ReadPredictionOutput(p *PredictorData, labelFile string) (string, error) {
 
 }
 
-// Delete the predictor 
+// Delete the predictor
 func Close(p *PredictorData) {
 	C.DeleteTflite(p.ctx)
 }

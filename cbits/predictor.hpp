@@ -32,7 +32,9 @@ int GetPredLenTflite(PredictorContext pred);
 
 void SetInputTflite_float(float* out, float* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels);
 
-void SetInputTflite_quantize(uint8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels);
+void SetInputTflite_quantize_8_unsigned(uint8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels);
+
+void SetInputTflite_quantize_8_signed(int8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels);
 
 #ifdef __cplusplus
 }

@@ -182,26 +182,37 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
   // and converts input data into required input data
   assert(input_dims->size == 4);
 
+  quantize_ = quantize;
   const int size = batch_ * width_ * height_ * channels_;
-  if(interpreter->tensor(input)->type == kTfLiteFloat32 && quantize == false) {
+  if(interpreter->tensor(input)->type == kTfLiteFloat32 && quantize_ == false) {
     LOG(INFO) << "Running float model" << "\n";
     if(height_ != 224 || width_ != 224 | channels_ != 3) {
       SetInputTflite_float(interpreter->typed_tensor<float>(input), inputData_float, 224, 224, 3, height_, width_, channels_);
     } else {
       memcpy(interpreter->typed_tensor<float>(input), &inputData_float[0], size);
     }
-  } else if (interpreter->tensor(input)->type == kTfLiteUInt8 && quantize == true) {
-    LOG(INFO) << "Running quantized model" << "\n";
+  } else if (interpreter->tensor(input)->type == kTfLiteUInt8 && quantize_ == true) {
+    LOG(INFO) << "Running 8-bit unsigned bitquantized model" << "\n";
     if(height_ != 224 || width_ != 224 || channels_ != 3) {
-      SetInputTflite_quantize(interpreter->typed_tensor<uint8_t>(input), inputData_quantize, 224, 224, 3, height_, width_, channels_);
+      SetInputTflite_quantize_8_unsigned(interpreter->typed_tensor<uint8_t>(input), inputData_quantize, 224, 224, 3, height_, width_, channels_);
     } else {
       uint8_t* base_pointer = interpreter->typed_tensor<uint8_t>(input);
       for(int i = 0; i < size; i++) {
         base_pointer[i] = (uint8_t)inputData_quantize[i];
       }
     }
+  } else if(interpreter->tensor(input)->type == kTfLiteInt8 && quantize_ == true) {
+    LOG(INFO) << "Running 8-bit quantized model" << "\n";
+    if(height_ != 224 || width_ != 224 || channels_ != 3) {
+      SetInputTflite_quantize_8_signed(interpreter->typed_tensor<int8_t>(input), inputData_quantize, 224, 224, 3, height_, width_, channels_);
+    } else {
+      int8_t* base_pointer = interpreter->typed_tensor<int8_t>(input);
+      for(int i = 0; i < size; i++) {
+        base_pointer[i] = (int8_t)inputData_quantize[i];
+      }
+    }
   } else {
-    LOG(FATAL) << "Unsupported input type: " << interpreter->tensor(input)->type << "\n";
+    LOG(FATAL) << "Unsupported input type: " << interpreter->tensor(input)->type << ", Quantize: " << quantize_ << "\n";
   }
 
   //const int output = interpreter->outputs()[0];
@@ -424,7 +435,7 @@ void SetInputTflite_float(float* out, float* in, int image_height, int image_wid
   }
 }
 
-void SetInputTflite_quantize(uint8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels) {
+void SetInputTflite_quantize_8_unsigned(uint8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels) {
   
   int number_of_pixels = image_height * image_width * image_channels;
   
@@ -480,3 +491,62 @@ void SetInputTflite_quantize(uint8_t* out, int* in, int image_height, int image_
       out[i] = (uint8_t)output[i];
   }
 }
+
+
+void SetInputTflite_quantize_8_signed(int8_t* out, int* in, int image_height, int image_width, int image_channels, int model_height, int model_width, int model_channels) {
+  
+  int number_of_pixels = image_height * image_width * image_channels;
+  
+  // create  a new interpreter to resize input image into model's desired dimensions
+  std::unique_ptr<Interpreter> interpreter(new Interpreter);
+  int base_index = 0;
+  // two inputs: input and new_sizes
+  interpreter->AddTensors(2, &base_index);
+  // one output
+  interpreter->AddTensors(1, &base_index);
+  // set input and output tensors
+  interpreter->SetInputs({0, 1});
+  interpreter->SetOutputs({2});
+
+  // set parameters of tensors
+  TfLiteQuantizationParams quant;
+  interpreter->SetTensorParametersReadWrite(
+      0, kTfLiteFloat32, "input",
+      {1, image_height, image_width, image_channels}, quant);
+  interpreter->SetTensorParametersReadWrite(1, kTfLiteInt32, "new_size", {2},
+                                            quant);
+  interpreter->SetTensorParametersReadWrite(
+      2, kTfLiteFloat32, "output",
+      {1, model_height, model_width, model_channels}, quant);
+
+  ops::builtin::BuiltinOpResolver resolver;
+  const TfLiteRegistration* resize_op =
+      resolver.FindOp(BuiltinOperator_RESIZE_BILINEAR, 1);
+  auto* params = reinterpret_cast<TfLiteResizeBilinearParams*>(
+      malloc(sizeof(TfLiteResizeBilinearParams)));
+  params->align_corners = false;
+  interpreter->AddNodeWithParameters({0, 1}, {2}, nullptr, 0, params, resize_op,
+                                     nullptr);
+
+  interpreter->AllocateTensors();
+
+  // fill input image
+  auto input = interpreter->typed_tensor<float>(0);
+  for (int i = 0; i < number_of_pixels; i++) {
+    input[i] = in[i];
+  }
+
+  // fill new_sizes
+  interpreter->typed_tensor<int>(1)[0] = model_height;
+  interpreter->typed_tensor<int>(1)[1] = model_width;
+
+  interpreter->Invoke();
+
+  auto output = interpreter->typed_tensor<float>(2);
+  auto output_number_of_pixels = model_height * model_width * model_channels;
+
+  for (int i = 0; i < output_number_of_pixels; i++) {
+      out[i] = (int8_t)output[i];
+  }
+}
+

@@ -281,12 +281,14 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
     uint8_t* prediction = interpreter->typed_output_tensor<uint8_t>(0);
     for(int i = 0; i < output_size; i++)
       result_float_[i] = prediction[i] / 255.0; 
+  } else if(interpreter->tensor(output)->type == kTfLiteInt8) {
+    int8_t* prediction = interpreter->typed_output_tensor<int8_t>(0);
+    for(int i = 0; i < output_size; i++)
+      result_float_[i] = prediction[i] / 255.0;
   } else {
     LOG(FATAL) << "Unsupported output type: " << interpreter->tensor(output)->type << "\n";
   }
   
-  quantize_ = quantize;
-
   //if(result_->data.f == nullptr) {
   //  LOG(FATAL) << "Got a NULL output" << "\n";
   //}

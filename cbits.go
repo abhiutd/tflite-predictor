@@ -19,14 +19,14 @@ import (
 
 // Hardware Modes
 const (
-	CPUMode1  = 1
-	CPUMode2  = 2
-	CPUMode3  = 3
-	CPUMode4  = 4
-	CPUMode5  = 5
-	CPUMode6  = 6
-	GPUMode   = 7
-	NNAPIMode = 8
+	CPU_1_thread = 1
+	CPU_2_thread = 2
+	CPU_3_thread = 3
+	CPU_4_thread = 4
+	CPU_5_thread = 5
+	CPU_6_thread = 6
+	GPU          = 7
+	NNAPI        = 8
 )
 
 // Predictor Structure definition

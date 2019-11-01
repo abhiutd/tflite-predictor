@@ -50,7 +50,7 @@ class Predictor {
     bool quantize_ = false;
     bool verbose_ = false; // display model details
     bool allow_fp16_ = false;
-    bool profile_ = false; // operator level profiling
+    bool profile_ = true; // operator level profiling
     bool read_outputs_ = true;
 };
 
@@ -170,9 +170,9 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
   height_ = input_dims->data[1];
   width_ = input_dims->data[2];
   channels_ = input_dims->data[3];
-  if(height_ != 224) LOG(FATAL) << "Model input height is not 224" << "\n";
-  if(width_ != 224) LOG(FATAL) << "Model input width is not 224" << "\n";
-  if(channels_ != 224) LOG(FATAL) << "Model input channel is not 3" << "\n";
+  if(height_ != 224) LOG(FATAL) << "Model input height is " << height_ << "\n";
+  if(width_ != 224) LOG(FATAL) << "Model input width is " << width_ << "\n";
+  if(channels_ != 224) LOG(FATAL) << "Model input channel is " << channels_ << "\n";
 
   assert(input_dims->size == 4);
 
@@ -195,8 +195,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
 
   auto profiler = absl::make_unique<profiling::Profiler>(1024);
   interpreter->SetProfiler(profiler.get());
-  if(profile_)
-    profiler->StartProfiling();
+  if(profile_ == true) profiler->StartProfiling();
 
   struct timeval start_time, stop_time;
   gettimeofday(&start_time, nullptr);  
@@ -209,7 +208,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
     LOG(INFO) << "Model computation (C++): " << (get_us(stop_time) - get_us(start_time))/1000 << "ms \n"; 
   }
 
-  if(profile_) {
+  if(profile_ == true) {
     profiler->StopProfiling();
     auto profile_events = profiler->GetProfileEvents();
     for(int i = 0; i < profile_events.size(); i++) {
@@ -224,7 +223,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
                 << EnumNameBuiltinOperator(static_cast<BuiltinOperator>(registration.builtin_code))
                 << "\n";
     }
-
+    LOG(INFO) << "Displayed layer wise profiling information" << "\n" ;
   }
 
   // Note: TfLiteTensor does not provide a size() API call which means we have to fetch the number of bytes the tensor

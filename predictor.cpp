@@ -170,10 +170,11 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
   height_ = input_dims->data[1];
   width_ = input_dims->data[2];
   channels_ = input_dims->data[3];
-  if(height_ != 224) LOG(FATAL) << "Model input height is " << height_ << "\n";
-  if(width_ != 224) LOG(FATAL) << "Model input width is " << width_ << "\n";
-  if(channels_ != 224) LOG(FATAL) << "Model input channel is " << channels_ << "\n";
-
+  if(verbose_) {
+    LOG(INFO) << "Model input height is " << height_ << "\n";
+    LOG(INFO) << "Model input width is " << width_ << "\n";
+    LOG(INFO) << "Model input channel is " << channels_ << "\n";
+  }
   assert(input_dims->size == 4);
 
   const int size = batch_ * width_ * height_ * channels_;
@@ -187,7 +188,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
       base_pointer[i] = (uint8_t)inputData_quantize[i];
     }
   } else {
-    LOG(FATAL) << "Unrecognized datatype or someother error" << "\n";
+    LOG(FATAL) << "Unsupported input type: " << interpreter->tensor(input)->type << "\n";
   }
 
   //const int output = interpreter->outputs()[0];
@@ -195,8 +196,10 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
 
   auto profiler = absl::make_unique<profiling::Profiler>(1024);
   interpreter->SetProfiler(profiler.get());
-  if(profile_ == true) profiler->StartProfiling();
-
+  if(profile_ == true) {
+    LOG(INFO) << "Starting profiler" << "\n";
+    profiler->StartProfiling();
+  }
   struct timeval start_time, stop_time;
   gettimeofday(&start_time, nullptr);  
   // run inference
@@ -209,9 +212,11 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
   }
 
   if(profile_ == true) {
+    LOG(INFO) << "Stopping profiler" << "\n";
     profiler->StopProfiling();
     auto profile_events = profiler->GetProfileEvents();
     for(int i = 0; i < profile_events.size(); i++) {
+      LOG(INFO) << "Inside profiler loop" << "\n";
       auto op_index = profile_events[i]->event_metadata;
       const auto node_and_registration = interpreter->node_and_registration(op_index);
       const TfLiteRegistration registration = node_and_registration->second;
@@ -252,6 +257,8 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
     uint8_t* prediction = interpreter->typed_output_tensor<uint8_t>(0);
     for(int i = 0; i < output_size; i++)
       result_float_[i] = prediction[i] / 255.0; 
+  } else {
+    LOG(FATAL) << "Unsupported output type: " << interpreter->tensor(output)->type << "\n";
   }
   
   quantize_ = quantize;

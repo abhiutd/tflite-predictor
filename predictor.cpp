@@ -116,7 +116,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
 
   // set appropriate hardware backend
   switch(mode_) {
-    case 7: {
+    case 9: {
       const TfLiteGpuDelegateOptions options = {
         .metadata = NULL,
         .compile_options = {
@@ -135,7 +135,7 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
          LOG(INFO) << "Applied " << "GPU delegate" << "\n";
       }
       break; }
-    case 8: {
+    case 10: {
       auto delegate = tflite::evaluation::CreateNNAPIDelegate();
       if(!delegate) {
         LOG(INFO) << "NNAPI acceleration is unsupported on this platform" << "\n";
@@ -159,6 +159,12 @@ void Predictor::Predict(int* inputData_quantize, float* inputData_float, bool qu
       break; }
     case 6: {
       interpreter->SetNumThreads(6);
+      break; }
+    case 7: {
+      interpreter->SetNumThreads(7);
+      break; }
+    case 8: {
+      interpreter->SetNumThreads(8);
       break; }
     default: {
       interpreter->SetNumThreads(4); }

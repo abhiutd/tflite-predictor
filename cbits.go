@@ -25,8 +25,10 @@ const (
 	CPU_4_thread = 4
 	CPU_5_thread = 5
 	CPU_6_thread = 6
-	GPU          = 7
-	NNAPI        = 8
+	CPU_7_thread = 7
+	CPU_8_thread = 8
+	GPU          = 9
+	NNAPI        = 10
 )
 
 // Predictor Structure definition

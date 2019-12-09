@@ -167,7 +167,7 @@ This command builds `tflite-predictor.aar` binary for Android with `arm64` ISA. 
 
 One can employ Tensorflow Lite mPredictor to perform model inference in multiple ways, which are listed below.
 
-# Standalone Predictor (mPredictor)
+1. Standalone Predictor (mPredictor)
 
 There are four main API calls to be used for performing model inference in a given mobile application.
 
@@ -187,10 +187,10 @@ Close()
 
 Refer to [cbits.go](cbits.go) for details on the inputs/outputs of each API call.
 
-# MLModelScope Mobile Agent
+2.  MLModelScope Mobile Agent
 
 Download MLModelScope mobile agent from [agent](https://github.com/abhiutd/agent-classification-android). It has Tensorflow Lite and Qualcomm SNPE mPredictors in built. Refer to its documentation to understand its usage.
 
-# MLModelScope web UI
+3. MLModelScope web UI
 
 Choose Tensorflow Lite as framework and one of the available mobile devices as hardware backend to perform model inference through web interface.

@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/rai-project/go-mxnet)](https://goreportcard.com/report/github.com/rai-project/go-mxnet)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Go binding for Tensorflow Lite C++ API. It is also referred to as MLModelScope mobile Predictor (mPredictor). It is used to perform model inference on mobile devices. It is used by the [Tensorflow Lite agent](https://github.com/abhiutd/tflite-agent) in [MLModelScope](mlmodelscope.org) to perform model inference in Go. More importantly, it can be used as a standalone predictor in any given Android/iOS application. Refer to [Usage Modes](usage mode) for further details.
+Go binding for Tensorflow Lite C++ API. It is also referred to as MLModelScope Tensorflow Lite mobile Predictor (TFLite mPredictor). It is used to perform model inference on mobile devices. It is used by the [Tensorflow Lite agent](https://github.com/abhiutd/tflite-agent) in [MLModelScope](mlmodelscope.org) to perform model inference in Go. More importantly, it can be used as a standalone predictor in any given Android/iOS application. Refer to [Usage Modes](Usage Modes) for further details.
 
 ## Installation
 
@@ -98,8 +98,8 @@ Given `--cpu` and `--fat_apk_cpu` options build for `arm64-v8a` ISA. Alter the o
 If you get an error about not being able to write to `/opt` then perform the following
 
 ```
-sudo mkdir -p /opt/mxnet
-sudo chown -R `whoami` /opt/mxnet
+sudo mkdir -p /opt/tflite
+sudo chown -R `whoami` /opt/tflite
 ```
 
 If you are using custom path for build files, change CGO_CFLAGS, CGO_CXXFLAGS and CGO_LDFLAGS enviroment variables. Refer to [Using cgo with the go command](https://golang.org/cmd/cgo/#hdr-Using_cgo_with_the_go_command).
